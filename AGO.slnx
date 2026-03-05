@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ago.Cli/Ago.Cli.csproj" Id="486bef49-0407-4ca5-847a-cb0d51e07d6c" />
+    <Project Path="src/Ago.Core/Ago.Core.csproj" Id="20ff371f-c556-4ec9-a633-0dc8b765b115" />
+  </Folder>
+</Solution>

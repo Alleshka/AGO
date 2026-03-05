@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Ago.Cli": {
+      "commandName": "Project",
+      "commandLineArgs": "init --path \"D:\\Projects\\AGO\""
+    }
+  }
+}
