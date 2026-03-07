@@ -1,0 +1,61 @@
+version: 1.0.0
+project:
+  name: AGO
+  language: csharp
+  testFramework: xunit
+agents:
+  style-review:
+    enabled: true
+    provider: 
+    mode: single
+  performance-review:
+    enabled: true
+    provider: 
+    mode: single
+  security-review:
+    enabled: true
+    provider: 
+    mode: single
+  test-generation:
+    enabled: false
+    provider: 
+    mode: single
+  doc-writer:
+    enabled: false
+    provider: 
+    mode: single
+llm:
+  default: ollama
+  fallback: 
+  providers:
+    ollama:
+      model: qwen2.5-coder:7b
+      apiKey: ''
+      baseUrl: http://localhost:11434
+    anthropic:
+      model: claude-sonnet-4
+      apiKey: ${AGO_ANTHROPIC_KEY}
+      baseUrl: ''
+    openai:
+      model: gpt-4o
+      apiKey: ${AGO_OPENAI_KEY}
+      baseUrl: ''
+    openrouter:
+      model: meta-llama/llama-3.1-8b-instruct:free
+      apiKey: ${AGO_OPENROUTER_KEY}
+      baseUrl: https://openrouter.ai/api/v1
+ignore:
+- '**/*.generated.cs'
+- '**/Migrations/**'
+- '**/bin/**'
+- '**/obj/**'
+presets:
+  check:
+  - review
+  full:
+  - review
+  - tests
+  - docs
+  ci:
+  - review
+  - security
