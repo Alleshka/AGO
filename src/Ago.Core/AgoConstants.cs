@@ -20,7 +20,7 @@
         public static class Defaults
         {
             public const string OllamaBaseUrl = "http://localhost:11434";
-            public const string OllamaModel = "qwen2.5-coder:14b";
+            public const string OllamaModel = "qwen2.5-coder:7b";
             public const string LlmProvider = "ollama";
         }
     }

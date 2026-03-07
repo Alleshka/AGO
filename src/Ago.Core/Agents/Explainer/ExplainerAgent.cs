@@ -11,13 +11,13 @@ namespace Ago.Core.Agents.Explainer
     {
         public override string Id => AgoConstants.AgentIds.Explainer;
 
-        public ExplainerAgent(LlmProviderFactory factory) : base(factory) { }
+        public ExplainerAgent(LlmProviderFactory factory, PromptResolver promptResolver) : base(factory, promptResolver) { }
 
-        protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context)
+        protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context, PromptResolver promptResolver)
         {
             var (subject, code) = ResolveSubject(context);
 
-            var system = $"""
+            var system = promptResolver.Resolve(this.Id, context.ProjectRoot) ?? $"""
             You are an expert C# developer and teacher.
             Explain the provided {subject} clearly and concisely.
 

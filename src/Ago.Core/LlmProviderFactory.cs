@@ -14,7 +14,8 @@ namespace Ago.Core
 
         public IChatClient GetForAgent(string agentId)
         {
-            var agentProvider = _config.Agents[agentId]?.Provider;
+            var agent = _config.Agents.TryGetValue(agentId, out var a) ? a : null;
+            var agentProvider = a?.Provider;
             var providerName = agentProvider ?? _config.Llm.Default;
             return Create(providerName);
         }

@@ -15,12 +15,14 @@ namespace Ago.Core.Agents
     public abstract class LlmAgentBase : IAgent
     {
         private readonly LlmProviderFactory _factory;
+        private readonly PromptResolver _promptResolver;
 
         public abstract string Id { get; }
 
-        protected LlmAgentBase(LlmProviderFactory factory)
+        protected LlmAgentBase(LlmProviderFactory factory, PromptResolver promptResolver)
         {
             _factory = factory;
+            _promptResolver = promptResolver;
         }
 
         public async Task<AgentResult> AnalyseAsync(AnalysisContext context, CancellationToken ct = default)

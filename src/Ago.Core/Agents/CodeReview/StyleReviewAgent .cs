@@ -11,11 +11,12 @@ namespace Ago.Core.Agents.CodeReview
     {
         public override string Id => AgoConstants.AgentIds.StyleReview;
 
-        public StyleReviewAgent(LlmProviderFactory factory) : base(factory) { }
+        public StyleReviewAgent(LlmProviderFactory factory, PromptResolver promptResolver) : base(factory, promptResolver) { }
 
-        protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context)
+        protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context, PromptResolver promptResolver)
         {
-            var system = """
+
+            var system = promptResolver.Resolve(this.Id, context.ProjectRoot) ?? """
             You are an expert C# code reviewer focused on code style.
             Review the provided code for:
             - Naming conventions (PascalCase for types/methods, camelCase for locals)
