@@ -15,4 +15,10 @@
     <ProjectReference Include="..\Ago.Core\Ago.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="ago.cmd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
