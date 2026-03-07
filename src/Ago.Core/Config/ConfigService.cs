@@ -93,27 +93,27 @@ namespace Ago.Core.Config
             },
             Agents = new Dictionary<string, AgentConfig>()
             {
-                ["style-review"] = new()
+                [AgoConstants.AgentIds.StyleReview] = new()
                 {
                     Enabled = true,
                     Provider = null,
                 },
-                ["performance-review"] = new()
+                [AgoConstants.AgentIds.PerformanceReview] = new()
                 {
                     Enabled = true,
                     Provider = null,
                 },
-                ["security-review"] = new()
+                [AgoConstants.AgentIds.SecurityReview] = new()
                 {
                     Enabled = true,
                     Provider = null,
                 },
-                ["test-generation"] = new()
+                [AgoConstants.AgentIds.TestGeneration] = new()
                 {
                     Enabled = false,
                     Provider = null,
                 },
-                ["doc-writer"] = new()
+                [AgoConstants.AgentIds.DocWriter] = new()
                 {
                     Enabled = false,
                     Provider = null,
@@ -127,8 +127,8 @@ namespace Ago.Core.Config
                 {
                     ["ollama"] = new()
                     {
-                        Model = "qwen2.5-coder:7b",
-                        BaseUrl = "http://localhost:11434",
+                        Model = AgoConstants.Defaults.OllamaModel, //"qwen2.5-coder:7b",
+                        BaseUrl = AgoConstants.Defaults.OllamaBaseUrl // "http://localhost:11434",
                     },
                     ["anthropic"] = new()
                     {
