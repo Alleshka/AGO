@@ -4,6 +4,7 @@
     <Project Path="src/Ago.Core/Ago.Core.csproj" Id="20ff371f-c556-4ec9-a633-0dc8b765b115" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Ago.Core.IntegrationTests/Ago.Core.IntegrationTests.csproj" Id="fb9f4599-0c36-429c-a73c-3598dff7c0ac" />
     <Project Path="tests/Ago.Core.Tests/Ago.Core.Tests.csproj" Id="7812c6a2-ddde-4f06-8487-e9b85ecd7767" />
   </Folder>
 </Solution>

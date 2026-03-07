@@ -29,7 +29,7 @@ llm:
   fallback: 
   providers:
     ollama:
-      model: qwen2.5-coder:7b
+      model: qwen2.5-coder:14b
       apiKey: ''
       baseUrl: http://localhost:11434
     anthropic:
