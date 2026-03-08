@@ -75,7 +75,8 @@ namespace Ago.Core.Agents.CodeReview
 
             try
             {
-                var items = JsonSerializer.Deserialize<List<StyleFinding>>(rawResponse.Trim(),
+                var clean = StripMarkdownFences(rawResponse);
+                var items = JsonSerializer.Deserialize<List<StyleFinding>>(clean.Trim(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? [];
 

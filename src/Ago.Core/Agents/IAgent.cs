@@ -1,6 +1,6 @@
 ﻿namespace Ago.Core.Agents
 {
-    internal interface IAgent
+    public interface IAgent
     {
         string Id { get; }
         Task<AgentResult> AnalyseAsync(AnalysisContext context, CancellationToken ct = default);

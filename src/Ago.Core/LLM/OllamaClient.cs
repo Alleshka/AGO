@@ -41,7 +41,7 @@ namespace Ago.Core.LLM
         public OllamaClient(string model = AgoConstants.Defaults.OllamaModel, string baseUrl = AgoConstants.Defaults.OllamaBaseUrl)
         {
             _model = model;
-            _http = new HttpClient { BaseAddress = new Uri(baseUrl) };
+            _http = new HttpClient { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromMinutes(5) };
         }
 
         // Allow injecting HttpClient for tests

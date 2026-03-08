@@ -29,7 +29,7 @@ namespace Ago.Core.Agents
         {
             try
             {
-                var messages = BuildPrompt(context);
+                var messages = BuildPrompt(context, _promptResolver);
                 var llm = _factory.GetForAgent(Id);
                 var response = await llm.SendAsync(messages, ct);
 
@@ -46,7 +46,7 @@ namespace Ago.Core.Agents
             }
         }
 
-        protected abstract IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context);
+        protected abstract IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context, PromptResolver promptResolver);
 
         protected abstract AgentResult ParseResponse(string rawResponse, AnalysisContext context);
 
@@ -78,6 +78,24 @@ namespace Ago.Core.Agents
             }
 
             return sb.ToString();
+        }
+
+        protected static string StripMarkdownFences(string raw)
+        {
+            var text = raw.Trim();
+
+            // Remove ```json ... ``` or ``` ... ```
+            if (text.StartsWith("```"))
+            {
+                var firstNewline = text.IndexOf('\n');
+                if (firstNewline >= 0)
+                    text = text[(firstNewline + 1)..];
+
+                if (text.EndsWith("```"))
+                    text = text[..^3].Trim();
+            }
+
+            return text.Trim();
         }
     }
 }
