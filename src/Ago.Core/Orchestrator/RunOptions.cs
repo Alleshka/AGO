@@ -10,7 +10,7 @@
         public bool DryRun { get; set; }
 
         public RunScope Scope { get; set; } = RunScope.Diff;
-        public string? FilePath { get; set; }
+        public string? Path { get; set; }
         public string? ClassName { get; set; }
 
         // --- Optional explicit project root (from -C flag) ---
@@ -32,5 +32,5 @@
         public void HasAgent(string agentId) => Agents.Contains(agentId);
     }
 
-    public enum RunScope { Diff, File, Class, All }
+    public enum RunScope { Diff, Path, Class, All }
 }

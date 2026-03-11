@@ -10,8 +10,52 @@ namespace Ago.Core.Agents.Explainer
     public class ExplainerAgent : LlmAgentBase
     {
         public override string Id => AgoConstants.AgentIds.Explainer;
+        protected override bool UseFileChanking => false;
 
         public ExplainerAgent(LlmProviderFactory factory, PromptResolver promptResolver) : base(factory, promptResolver) { }
+
+        public override async Task<AgentResult> AnalyseAsync(AnalysisContext context, CancellationToken ct = default)
+        {
+            if (context.Path is not null && Directory.Exists(context.Path))
+            {
+                return await ExplainDirectoryAsync(context, ct);
+            }
+
+            return await base.AnalyseAsync(context, ct);
+        }
+
+        private async Task<AgentResult> ExplainDirectoryAsync(AnalysisContext context, CancellationToken ct)
+        {
+            var files = Directory.GetFiles(context.Path!, "*", SearchOption.AllDirectories);
+
+            var summaries = await Task.WhenAll(files.Select(async file =>
+            {
+                var fileContext = context with { Path = file };
+                var result = await base.AnalyseAsync(fileContext, ct);
+                return $"### {Path.GetFileName(file)}\n{result.Explanation}";
+            }));
+
+            var finalMessages = new[]
+            {
+                ChatMessage.System("You are an expert C# developer and teacher"),
+                ChatMessage.User($"""
+                    Here are summaries of individual files in a directory.
+                    Explain how they work together — the overall architecture,
+                    responsibilities, and relationships between components.
+                    {string.Join("\n\n", summaries)}
+                    """)
+            };
+
+            var llm = _factory.GetForAgent(Id);
+            var response = await llm.SendAsync(finalMessages, ct);
+
+            return new AgentResult
+            {
+                AgentId = Id,
+                Success = true,
+                Explanation = response.Content
+            };
+        }
 
         protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context, PromptResolver promptResolver)
         {
@@ -52,10 +96,10 @@ namespace Ago.Core.Agents.Explainer
                 return (subject, context.RawCode);
             }
 
-            if (context.FilePath is not null)
+            if (context.Path is not null)
             {
-                var code = File.ReadAllText(context.FilePath);
-                return ($"file {Path.GetFileName(context.FilePath)}", code);
+                var code = File.ReadAllText(context.Path);
+                return ($"file {Path.GetFileName(context.Path)}", code);
             }
 
             throw new InvalidOperationException(

@@ -74,7 +74,7 @@ namespace Ago.Core.Orchestrator
                 ProjectRoot = projectRoot,
                 Config = config,
                 Diff = diff,
-                FilePath = options.Scope == RunScope.File ? options.FilePath : null,
+                Path = options.Scope == RunScope.Path ? options.Path : null,
                 ClassName = options.Scope == RunScope.Class ? options.ClassName : null,
             };
         }

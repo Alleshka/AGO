@@ -58,10 +58,10 @@ namespace Ago.Core.Agents.CodeReview
                 return $"Review this code:\n\n{context.RawCode}";
             }
 
-            if (context.FilePath is not null)
+            if (context.Path is not null)
             {
-                var code = File.ReadAllText(context.FilePath);
-                return $"Review this file ({context.FilePath}):\n\n{code}";
+                var code = File.ReadAllText(context.Path);
+                return $"Review this file ({context.Path}):\n\n{code}";
             }
 
             throw new InvalidOperationException($"{AgoConstants.AgentIds.StyleReview}: context must have Diff, RawCode, or FilePath.");
@@ -69,7 +69,7 @@ namespace Ago.Core.Agents.CodeReview
 
         protected override AgentResult ParseResponse(string rawResponse, AnalysisContext context)
         {
-            var filePath = context.FilePath
+            var filePath = context.Path
                         ?? context.Diff?.Files.FirstOrDefault()?.Path
                         ?? "unknown";
 

@@ -12,7 +12,7 @@ namespace Ago.Core.Agents
         public required AgoConfig Config { get; init; }
 
         public DiffResult? Diff { get; init; }
-        public string? FilePath { get; init; }
+        public string? Path { get; init; }
         public string? ClassName { get; init; }
         public string? RawCode { get; init; }
 

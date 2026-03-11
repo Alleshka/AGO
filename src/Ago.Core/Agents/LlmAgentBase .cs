@@ -1,10 +1,6 @@
 ﻿using Ago.Core.Git.Diff;
 using Ago.Core.LLM;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Ago.Core.Agents
 {
@@ -14,7 +10,9 @@ namespace Ago.Core.Agents
     /// </summary>
     public abstract class LlmAgentBase : IAgent
     {
-        private readonly LlmProviderFactory _factory;
+        protected virtual bool UseFileChanking => true;
+
+        protected readonly LlmProviderFactory _factory;
         private readonly PromptResolver _promptResolver;
 
         public abstract string Id { get; }
@@ -25,7 +23,45 @@ namespace Ago.Core.Agents
             _promptResolver = promptResolver;
         }
 
-        public async Task<AgentResult> AnalyseAsync(AnalysisContext context, CancellationToken ct = default)
+        public virtual async Task<AgentResult> AnalyseAsync(AnalysisContext context, CancellationToken ct = default)
+        {
+            var files = ResolveFiles(context);
+
+            if (UseFileChanking && files.Count > 1)
+            {
+                var allFindings = new List<Finding>();
+                var errors = new List<string>();
+
+                foreach (var file in files)
+                {
+                    var fileContext = context with { Path = file, Diff = null };
+                    var result = await AnalyseAsync(fileContext, ct);
+
+                    if (result.Success)
+                    {
+                        allFindings.AddRange(result.Findings);
+                    }
+                    else
+                    {
+                        errors.Add($"{file}: {result.Error}");
+                    }
+                }
+
+                return new AgentResult
+                {
+                    AgentId = Id,
+                    Success = errors.Count == 0,
+                    Findings = allFindings,
+                    Error = errors.Count > 0 ? string.Join(Environment.NewLine, errors) : null
+                };
+            }
+            else
+            {
+                return await AnalyseSingleAsync(context, ct);
+            }
+        }
+
+        public async Task<AgentResult> AnalyseSingleAsync(AnalysisContext context, CancellationToken ct = default)
         {
             try
             {
@@ -96,6 +132,31 @@ namespace Ago.Core.Agents
             }
 
             return text.Trim();
+        }
+
+        protected static IReadOnlyList<string> ResolveFiles(AnalysisContext context)
+        {
+            if (context.Diff is not null)
+            {
+                return context.Diff.Files.Select(f => f.Path).ToList();
+            }
+
+            if (context.Path is not null)
+            {
+                return [];
+            }
+
+            if (Directory.Exists(context.Path))
+            {
+                return Directory.GetFiles(context.Path, "*", SearchOption.AllDirectories).ToList();
+            }
+
+            if (File.Exists(context.Path))
+            {
+                return [context.Path];
+            }
+
+            return [];
         }
     }
 }

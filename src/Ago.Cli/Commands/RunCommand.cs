@@ -26,7 +26,7 @@ namespace Ago.Cli.Commands
                 Description = "class name",
             };
 
-            var fileOption = new Option<string?>("--file", "-f")
+            var pathOption = new Option<string?>("--path", "-p")
             {
                 Description = "file path"
             };
@@ -46,7 +46,7 @@ namespace Ago.Cli.Commands
                 agentsOption,
                 scopeOption,
                 classOption,
-                fileOption,
+                pathOption,
                 styleReviewOption,
                 explainerOption
             };
@@ -56,7 +56,7 @@ namespace Ago.Cli.Commands
                 var agents = result.GetValue(agentsOption).ToHashSet() ?? [];
                 var scope = result.GetValue(scopeOption);
                 var className = result.GetValue(classOption);
-                var filePath = result.GetValue(fileOption);
+                var path = result.GetValue(pathOption);
 
                 var isReview = result.GetValue(styleReviewOption);
                 var isExplainer = result.GetValue(explainerOption);
@@ -75,12 +75,22 @@ namespace Ago.Cli.Commands
                     runOptions.AddAgent(AgoConstants.AgentIds.Explainer);
                 }
 
-                runOptions.AddAgents(agents.ToArray());
-
-                runOptions.ProjectRoot = ProjectResolver.ResolveProjectRoot();
-                runOptions.FilePath = filePath;
-                runOptions.ClassName = className;
                 runOptions.Scope = scope;
+
+                if (!string.IsNullOrEmpty(path))
+                {
+                    runOptions.Path = path;
+                    runOptions.Scope = RunScope.Path;
+                }
+
+                if (!string.IsNullOrEmpty(className))
+                {
+                    runOptions.ClassName = className;
+                    runOptions.Scope = RunScope.Class;
+                }
+
+                runOptions.AddAgents(agents.ToArray());
+                runOptions.ProjectRoot = ProjectResolver.ResolveProjectRoot();
 
                 var orchestrator = OrchestratorFactory.Create();
                 var orcResult = await orchestrator.RunAsync(runOptions);
