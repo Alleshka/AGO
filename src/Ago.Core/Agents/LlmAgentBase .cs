@@ -1,6 +1,9 @@
 ﻿using Ago.Core.Git.Diff;
 using Ago.Core.LLM;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Schema;
 
 namespace Ago.Core.Agents
 {
@@ -10,6 +13,16 @@ namespace Ago.Core.Agents
     /// </summary>
     public abstract class LlmAgentBase : IAgent
     {
+        protected record AgentFinding(
+            int LineStart,
+            int LineEnd,
+            string Description,
+            string Priority);
+
+        protected JsonNode schema = JsonSchemaExporter.GetJsonSchemaAsNode(
+            JsonSerializerOptions.Default,
+            typeof(AgentFinding));
+
         protected virtual bool UseFileChanking => true;
 
         protected readonly LlmProviderFactory _factory;

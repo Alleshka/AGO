@@ -219,12 +219,12 @@ namespace Ago.Core.Orchestrator
                     Console.Write($"{f.FilePath}:{f.LineStart}");
                     Console.WriteLine($"  {f.Description}");
 
-                    if (f.ProposedChange is not null && !options.DryRun)
-                    {
-                        Console.ForegroundColor = ConsoleColor.DarkGray;
-                        Console.WriteLine($"           → {f.ProposedChange}");
-                        Console.ResetColor();
-                    }
+                    //if (f.ProposedChange is not null && !options.DryRun)
+                    //{
+                    //    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    //    Console.WriteLine($"           → {f.ProposedChange}");
+                    //    Console.ResetColor();
+                    //}
                 }
             }
             else

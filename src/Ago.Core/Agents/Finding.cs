@@ -11,7 +11,7 @@
         public required FindingType Type { get; init; }
         public required string Description { get; init; }
 
-        public string? ProposedChange { get; init; }
+        //public string? ProposedChange { get; init; }
         public Priority Priority { get; init; } = Priority.Medium;
     }
 }

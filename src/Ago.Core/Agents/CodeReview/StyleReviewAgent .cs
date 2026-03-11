@@ -16,7 +16,7 @@ namespace Ago.Core.Agents.CodeReview
         protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context, PromptResolver promptResolver)
         {
 
-            var system = promptResolver.Resolve(this.Id, context.ProjectRoot) ?? """
+            var system = promptResolver.Resolve(this.Id, context.ProjectRoot) ?? $"""
             You are an expert C# code reviewer focused on code style.
             Review the provided code for:
             - Naming conventions (PascalCase for types/methods, camelCase for locals)
@@ -27,13 +27,7 @@ namespace Ago.Core.Agents.CodeReview
 
             Respond ONLY with a JSON array of findings. No prose, no markdown fences.
             Each finding must have this exact shape:
-            {
-              "lineStart": <int>,
-              "lineEnd": <int>,
-              "description": "<what is wrong>",
-              "proposedChange": "<suggested fix or null>",
-              "priority": "<High|Medium|Low>"
-            }
+            {schema}
 
             If there are no issues, respond with an empty array: []
             """;
@@ -76,7 +70,7 @@ namespace Ago.Core.Agents.CodeReview
             try
             {
                 var clean = StripMarkdownFences(rawResponse);
-                var items = JsonSerializer.Deserialize<List<StyleFinding>>(clean.Trim(),
+                var items = JsonSerializer.Deserialize<List<AgentFinding>>(clean.Trim(),
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                     ?? [];
 
@@ -109,12 +103,5 @@ namespace Ago.Core.Agents.CodeReview
                 };
             }
         }
-
-        private record StyleFinding(
-            int LineStart,
-            int LineEnd,
-            string Description,
-            string? ProposedChange,
-            string Priority);
     }
 }
