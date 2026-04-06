@@ -29,12 +29,18 @@
             {
                 public const string Model = "claude-sonnet-4-5";
             }
+
+            public static class OpenRouterConfig
+            {
+                public const string Model = "qwen/qwen3-coder-480b:free";
+            }
         }
 
         public static class ModelNames
         {
             public const string Ollama = "ollama";
             public const string Anthropic = "anthropic";
+            public const string OpenRouter = "openrouter";
         }
     }
 }

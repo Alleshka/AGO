@@ -36,6 +36,7 @@ namespace Ago.Core
             {
                 AgoConstants.ModelNames.Ollama => new OllamaClient(cfg.Model, cfg.BaseUrl),
                 AgoConstants.ModelNames.Anthropic => new AnthropicClient(cfg),
+                AgoConstants.ModelNames.OpenRouter => new OpenRouterClient(cfg),
                 _ => throw new InvalidOperationException($"Unknown provider: {providerName}")
             };
         }

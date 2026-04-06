@@ -29,7 +29,7 @@ agents:
     provider: 
     mode: single
 llm:
-  default: ollama
+  default: openrouter
   fallback: 
   providers:
     ollama:
@@ -45,7 +45,7 @@ llm:
       apiKey: ${AGO_OPENAI_KEY}
       baseUrl: https://api.anthropic.com/
     openrouter:
-      model: meta-llama/llama-3.1-8b-instruct:free
+      model: openrouter/free
       apiKey: ${AGO_OPENROUTER_KEY}
       baseUrl: https://openrouter.ai/api/v1
 ignore:
