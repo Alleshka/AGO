@@ -11,6 +11,7 @@ namespace Ago.Core.Git
         public async Task<DiffResult> GetDiffAsync(string projectRoot, CancellationToken ct = default)
         {
             var raw = await runner.RunAsync("diff HEAD", projectRoot, ct);
+
             return GitDiffParser.Parse(raw);
         }
 

@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http.Json;
-using System.Text;
+﻿using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Threading.Tasks;
 
 namespace Ago.Core.LLM
 {
@@ -28,8 +23,9 @@ namespace Ago.Core.LLM
             public int? EvalCount { get; set; }
         }
 
-        private readonly HttpClient _http;
+        private readonly HttpClient _http = SHaredHttpClient.Instance;
         private readonly string _model;
+        private readonly string _baseUrl;
 
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
@@ -38,10 +34,10 @@ namespace Ago.Core.LLM
             PropertyNameCaseInsensitive = true,
         };
 
-        public OllamaClient(string model = AgoConstants.Defaults.OllamaModel, string baseUrl = AgoConstants.Defaults.OllamaBaseUrl)
+        public OllamaClient(string model = AgoConstants.DefaultsProviderConfigs.OllamaProviderConfig.Model, string baseUrl = AgoConstants.DefaultsProviderConfigs.OllamaProviderConfig.BaseUrl)
         {
             _model = model;
-            _http = new HttpClient { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromMinutes(5) };
+            _baseUrl = baseUrl;
         }
 
         // Allow injecting HttpClient for tests
@@ -55,7 +51,8 @@ namespace Ago.Core.LLM
         {
             try
             {
-                var response = await _http.GetAsync("/api/tags", ct);
+                var request = BuildHttpRequest("api/tags");
+                var response = await _http.SendAsync(request, ct);
                 return response.IsSuccessStatusCode;
             }
             catch
@@ -73,7 +70,8 @@ namespace Ago.Core.LLM
                 Stream = false,
             };
 
-            var response = await _http.PostAsJsonAsync("/api/chat", request, JsonOptions, ct);
+            var httpRequest = BuildHttpRequest("/api/chat", request);
+            var response = await _http.SendAsync(httpRequest, ct);
             response.EnsureSuccessStatusCode();
 
             var result = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(JsonOptions, ct)
@@ -87,6 +85,19 @@ namespace Ago.Core.LLM
                     ? new TokenUsage(result.PromptEvalCount.Value, result.EvalCount ?? 0)
                     : null,
             };
+        }
+
+        private HttpRequestMessage BuildHttpRequest(string url, object body = null)
+        {
+            var fullUrl = $"{_baseUrl.TrimEnd('/')}/{url.TrimStart('/')}";
+            var request = new HttpRequestMessage(HttpMethod.Post, fullUrl);
+
+            if (body != null)
+            {
+                request.Content = JsonContent.Create(body, options: JsonOptions);
+            }
+
+            return request;
         }
     }
 }

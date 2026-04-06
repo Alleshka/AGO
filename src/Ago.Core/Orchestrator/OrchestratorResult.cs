@@ -20,5 +20,5 @@ namespace Ago.Core.Orchestrator
             Findings.Where(f => f.Priority == Priority.High);
     }
 
-    public record AgentExplanation(string AgentId, string FilePath, string Text);
+    public record AgentExplanation(string AgentId, string Text);
 }

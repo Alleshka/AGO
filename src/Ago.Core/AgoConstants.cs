@@ -17,11 +17,24 @@
             public const string Explainer = "explainer";
         }
 
-        public static class Defaults
+        public static class DefaultsProviderConfigs
         {
-            public const string OllamaBaseUrl = "http://localhost:11434";
-            public const string OllamaModel = "qwen2.5-coder:7b";
-            public const string LlmProvider = "ollama";
+            public static class OllamaProviderConfig
+            {
+                public const string BaseUrl = "http://localhost:11434";
+                public const string Model = "qwen2.5-coder:7b";
+            }
+
+            public static class AnthropicProviderConfig
+            {
+                public const string Model = "claude-sonnet-4-5";
+            }
+        }
+
+        public static class ModelNames
+        {
+            public const string Ollama = "ollama";
+            public const string Anthropic = "anthropic";
         }
     }
 }

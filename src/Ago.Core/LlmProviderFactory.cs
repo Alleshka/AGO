@@ -6,6 +6,7 @@ namespace Ago.Core
     public class LlmProviderFactory
     {
         private readonly AgoConfig _config;
+        private readonly Dictionary<string, IChatClient> cache = new();
 
         public LlmProviderFactory(AgoConfig config)
         {
@@ -17,7 +18,14 @@ namespace Ago.Core
             var agent = _config.Agents.TryGetValue(agentId, out var a) ? a : null;
             var agentProvider = a?.Provider;
             var providerName = agentProvider ?? _config.Llm.Default;
-            return Create(providerName);
+
+            if (!cache.TryGetValue(providerName, out var client))
+            {
+                client = Create(providerName);
+                cache[providerName] = client;
+            }
+
+            return client;
         }
 
         private IChatClient Create(string providerName)
@@ -26,7 +34,8 @@ namespace Ago.Core
 
             return providerName switch
             {
-                "ollama" => new OllamaClient(cfg.Model, cfg.BaseUrl),
+                AgoConstants.ModelNames.Ollama => new OllamaClient(cfg.Model, cfg.BaseUrl),
+                AgoConstants.ModelNames.Anthropic => new AnthropicClient(cfg),
                 _ => throw new InvalidOperationException($"Unknown provider: {providerName}")
             };
         }

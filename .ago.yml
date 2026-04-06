@@ -24,6 +24,10 @@ agents:
     enabled: false
     provider: 
     mode: single
+  explainer:
+    enabled: true
+    provider: 
+    mode: single
 llm:
   default: ollama
   fallback: 
@@ -39,7 +43,7 @@ llm:
     openai:
       model: gpt-4o
       apiKey: ${AGO_OPENAI_KEY}
-      baseUrl: ''
+      baseUrl: https://api.anthropic.com/
     openrouter:
       model: meta-llama/llama-3.1-8b-instruct:free
       apiKey: ${AGO_OPENROUTER_KEY}

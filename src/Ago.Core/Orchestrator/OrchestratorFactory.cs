@@ -27,11 +27,11 @@ namespace Ago.Core.Orchestrator
 
             var agents = new Dictionary<string, IAgent>
             {
-                [AgoConstants.AgentIds.StyleReview] = new StyleReviewAgent(factory, resolver),
+                //[AgoConstants.AgentIds.StyleReview] = new StyleReviewAgent(factory, resolver),
+                //[AgoConstants.AgentIds.PerformanceReview] = new PerformanceReviewAgent(factory, resolver),
                 [AgoConstants.AgentIds.Explainer] = new ExplainerAgent(factory, resolver),
+                //[AgoConstants.AgentIds.SecurityReview] = new SecurityReviewAgent(factory, resolver),
                 // Add more agents here as they are implemented:
-                // [AgoConstants.AgentIds.PerformanceReview] = new PerformanceReviewAgent(factory, resolver),
-                // [AgoConstants.AgentIds.SecurityReview]    = new SecurityReviewAgent(factory, resolver),
                 // [AgoConstants.AgentIds.TestGeneration]    = new TestGeneratorAgent(factory, resolver),
             };
 

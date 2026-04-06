@@ -1,4 +1,6 @@
-﻿using YamlDotNet.Serialization;
+﻿using System.Runtime.CompilerServices;
+using System.Text;
+using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace Ago.Core.Config
@@ -35,7 +37,8 @@ namespace Ago.Core.Config
             var yaml = File.ReadAllText(path);
             var config = _deserializer.Deserialize<AgoConfig>(yaml);
 
-            ResolveEnvVariables(config);
+            var variables = LoadEnvVariables(projectRoot);
+            ResolveEnvVariables(config, variables);
 
             return config;
         }
@@ -47,6 +50,18 @@ namespace Ago.Core.Config
             var path = ConfigFilePath(projectRoot);
             var yaml = _serializer.Serialize(config);
             File.WriteAllText(path, yaml);
+        }
+
+        private IReadOnlyDictionary<string, string> LoadEnvVariables(string projectRoot)
+        {
+            var path = Path.Combine(projectRoot, ".env");
+            if (!File.Exists(path)) return new Dictionary<string, string>();
+
+            return File.ReadAllLines(path, Encoding.UTF8)
+                .Where(line => !string.IsNullOrWhiteSpace(line) && !line.TrimStart().StartsWith("#"))
+                .Select(line => line.Split("=", 2))
+                .Where(parts => parts.Length == 2)
+                .ToDictionary(parts => parts[0].Trim(), parts => parts[1].Trim());
         }
 
         /// <summary>
@@ -125,14 +140,14 @@ namespace Ago.Core.Config
                 Fallback = null,
                 Providers = new Dictionary<string, LlmProviderConfig>
                 {
-                    ["ollama"] = new()
+                    [AgoConstants.ModelNames.Ollama] = new()
                     {
-                        Model = AgoConstants.Defaults.OllamaModel, //"qwen2.5-coder:7b",
-                        BaseUrl = AgoConstants.Defaults.OllamaBaseUrl // "http://localhost:11434",
+                        Model = AgoConstants.DefaultsProviderConfigs.OllamaProviderConfig.Model, //"qwen2.5-coder:7b",
+                        BaseUrl = AgoConstants.DefaultsProviderConfigs.OllamaProviderConfig.BaseUrl // "http://localhost:11434",
                     },
-                    ["anthropic"] = new()
+                    [AgoConstants.ModelNames.Anthropic] = new()
                     {
-                        Model = "claude-sonnet-4",
+                        Model = AgoConstants.DefaultsProviderConfigs.OllamaProviderConfig.Model, // "claude-sonnet-4",
                         ApiKey = "${AGO_ANTHROPIC_KEY}",
                     },
                     ["openai"] = new()
@@ -166,25 +181,28 @@ namespace Ago.Core.Config
         /// <summary>
         /// Replaces ${ENV_VAR} placeholders with actual environment variable values.
         /// </summary>
-        private static void ResolveEnvVariables(AgoConfig config)
+        private static void ResolveEnvVariables(AgoConfig config, IReadOnlyDictionary<string, string> env)
         {
             foreach (var provider in config.Llm.Providers.Values)
             {
                 if (provider.ApiKey is not null)
-                    provider.ApiKey = ResolveEnvValue(provider.ApiKey);
+                    provider.ApiKey = ResolveEnvValue(provider.ApiKey, env);
 
                 if (!string.IsNullOrEmpty(provider.BaseUrl))
-                    provider.BaseUrl = ResolveEnvValue(provider.BaseUrl);
+                    provider.BaseUrl = ResolveEnvValue(provider.BaseUrl, env);
             }
         }
 
-        private static string ResolveEnvValue(string value)
+        private static string ResolveEnvValue(string value, IReadOnlyDictionary<string, string> env)
         {
             if (!value.StartsWith("${") || !value.EndsWith("}"))
                 return value;
 
             var envName = value[2..^1];
-            return Environment.GetEnvironmentVariable(envName) ?? value;
+
+            return env.TryGetValue(envName, out var envValue)
+                ? envValue
+                : Environment.GetEnvironmentVariable(envName) ?? value;
         }
 
         private static void AddToGitIgnore(string projectRoot)

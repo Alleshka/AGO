@@ -7,42 +7,58 @@ namespace Ago.Core.Agents.Explainer
     /// Supports: diff, file, class, method, or raw snippet.
     /// Returns free-form text in AgentResult.Explanation — no Findings.
     /// </summary>
-    public class ExplainerAgent : LlmAgentBase
+    internal class ExplainerAgent : LlmAgentBase
     {
         public override string Id => AgoConstants.AgentIds.Explainer;
-        protected override bool UseFileChanking => false;
+        public override AgentScope AgentScope => AgentScope.FileSet;
 
         public ExplainerAgent(LlmProviderFactory factory, PromptResolver promptResolver) : base(factory, promptResolver) { }
 
         public override async Task<AgentResult> AnalyseAsync(AnalysisContext context, CancellationToken ct = default)
         {
-            if (context.Path is not null && Directory.Exists(context.Path))
+            if (context.Files.Count == 0)
+                return new AgentResult
+                {
+                    AgentId = Id,
+                    Success = false,
+                    Error = "No files to explain."
+                };
+
+            if (context.Files.Count <= 1)
             {
-                return await ExplainDirectoryAsync(context, ct);
+                return await base.AnalyseSingleAsync(context, ct);
             }
 
-            return await base.AnalyseAsync(context, ct);
+            return await ExplainFilesAsync(context, ct);
         }
 
-        private async Task<AgentResult> ExplainDirectoryAsync(AnalysisContext context, CancellationToken ct)
+        // TODO: directory explanation does not go through PromptResolver
+        private async Task<AgentResult> ExplainFilesAsync(AnalysisContext context, CancellationToken ct)
         {
-            var files = Directory.GetFiles(context.Path!, "*", SearchOption.AllDirectories);
+            var summaries = await Task.WhenAll(
+                    context.Files.Select(async kv =>
+                    {
+                        var (path, content) = kv;
+                        var fileContext = context with
+                        {
+                            Files = new Dictionary<string, string> { [path] = content },
+                        };
+                        var result = await AnalyseSingleAsync(fileContext, ct);
+                        return $"### {Path.GetFileName(path)}\n{result.Explanation}";
+                    }));
 
-            var summaries = await Task.WhenAll(files.Select(async file =>
-            {
-                var fileContext = context with { Path = file };
-                var result = await base.AnalyseAsync(fileContext, ct);
-                return $"### {Path.GetFileName(file)}\n{result.Explanation}";
-            }));
 
             var finalMessages = new[]
             {
-                ChatMessage.System("You are an expert C# developer and teacher"),
+                ChatMessage.System("""
+                    You are an expert C# developer and teacher.                  
+                    Explain how the provided components work together —
+                    overall architecture, responsibilities, relationships
+                    """),
                 ChatMessage.User($"""
-                    Here are summaries of individual files in a directory.
-                    Explain how they work together — the overall architecture,
-                    responsibilities, and relationships between components.
+                    Here are summaries of {context.Files.Count} files in a directory.
                     {string.Join("\n\n", summaries)}
+                    Explain how they work together        
                     """)
             };
 
@@ -56,14 +72,22 @@ namespace Ago.Core.Agents.Explainer
                 Explanation = response.Content
             };
         }
-
-        protected override IReadOnlyList<ChatMessage> BuildPrompt(AnalysisContext context, PromptResolver promptResolver)
+        protected override AgentResult ParseResponse(string rawResponse, AnalysisContext context)
         {
-            var (subject, code) = ResolveSubject(context);
+            return new AgentResult
+            {
+                AgentId = Id,
+                Success = true,
+                Explanation = rawResponse.Trim(),
+                // No Findings — ExplainerAgent only explains, never flags issues
+            };
+        }
 
-            var system = promptResolver.Resolve(this.Id, context.ProjectRoot) ?? $"""
+        protected override string BuildSystemPrompt(AnalysisContext context)
+        {
+            return $"""
             You are an expert C# developer and teacher.
-            Explain the provided {subject} clearly and concisely.
+            Explain the provided {(context.Scope == Orchestrator.RunScope.Diff ? "diff" : "code")} clearly and concisely.
 
             Structure your explanation as:
             1. **Purpose** — what this code does in one sentence
@@ -74,47 +98,6 @@ namespace Ago.Core.Agents.Explainer
             Write for an audience of intermediate developers.
             Be direct. Avoid filler phrases.
             """;
-
-            return [
-                ChatMessage.System(system),
-                ChatMessage.User($"Explain this {subject}:\n\n{code}"),
-            ];
-        }
-
-        private static (string subject, string code) ResolveSubject(AnalysisContext context)
-        {
-            if (context.Diff is not null)
-            {
-                return ("diff", FormatDiffForPrompt(context.Diff));
-            }
-
-            if (context.RawCode is not null)
-            {
-                var subject = context.ClassName is not null
-                    ? $"class {context.ClassName}"
-                    : "code snippet";
-                return (subject, context.RawCode);
-            }
-
-            if (context.Path is not null)
-            {
-                var code = File.ReadAllText(context.Path);
-                return ($"file {Path.GetFileName(context.Path)}", code);
-            }
-
-            throw new InvalidOperationException(
-                $"{AgoConstants.AgentIds.Explainer}: context must have Diff, RawCode, or FilePath.");
-        }
-
-        protected override AgentResult ParseResponse(string rawResponse, AnalysisContext context)
-        {
-            return new AgentResult
-            {
-                AgentId = Id,
-                Success = true,
-                Explanation = rawResponse.Trim(),
-                // No Findings — ExplainerAgent only explains, never flags issues
-            };
         }
     }
 

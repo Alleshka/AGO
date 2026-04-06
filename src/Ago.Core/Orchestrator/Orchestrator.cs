@@ -2,12 +2,8 @@
 using Ago.Core.Config;
 using Ago.Core.Git;
 using Ago.Core.Git.Diff;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Ago.Core.Orchestrator
 {
@@ -38,7 +34,6 @@ namespace Ago.Core.Orchestrator
                 ?? throw new InvalidOperationException(
                     "Not an ago project. Run 'ago init'.");
             var config = _configService.Load(projectRoot);
-            var context = await BuildContextAsync(options, projectRoot, config, ct);
             var selected = SelectAgents(options, config);
 
             if (selected.Count == 0)
@@ -47,126 +42,168 @@ namespace Ago.Core.Orchestrator
                 return new OrchestratorResult { Success = true, Elapsed = sw.Elapsed };
             }
 
-            var agentResults = await RunAgentsAsync(selected, context, ct);
-            var result = Aggregate(agentResults, sw.Elapsed);
+            var files = await ResolveInputAsync(options, projectRoot, ct);
+            var sharedContext = new AnalysisContext
+            {
+                ProjectRoot = projectRoot,
+                Config = config,
+                Path = options.Path,
+                Scope = options.Scope,
+                Files = files,
+            };
+
+            var pipeline = new PipelineContext { Analysis = sharedContext };
+            var results = await RunAnalysePhaseAsync(selected, pipeline, ct);
+            pipeline.AddResults(results);
+
+            var result = BuildResult(pipeline, sw.Elapsed);
             PrintReport(result, options);
 
             return result;
         }
 
-        // -------------------------------------------------------------------------
-        // Context
-        // -------------------------------------------------------------------------
-
-        private async Task<AnalysisContext> BuildContextAsync(
+        private async Task<IReadOnlyDictionary<string, string>> ResolveInputAsync(
             RunOptions options,
             string projectRoot,
-            AgoConfig config,
             CancellationToken ct)
         {
-            DiffResult? diff = null;
-
             if (options.Scope == RunScope.Diff)
-                diff = await _git.GetDiffAsync(projectRoot, ct);
-
-            return new AnalysisContext
             {
-                ProjectRoot = projectRoot,
-                Config = config,
-                Diff = diff,
-                Path = options.Scope == RunScope.Path ? options.Path : null,
-                ClassName = options.Scope == RunScope.Class ? options.ClassName : null,
-            };
+                var diff = await _git.GetDiffAsync(projectRoot, ct);
+                var files = diff.Files
+                    .Where(f => f.ChangeType != FileChangeType.Deleted)
+                    .ToDictionary(
+                    f => Path.GetFullPath(Path.Combine(projectRoot, f.Path)),
+                    f => FormatFileDiff(f));
+                return files;
+            }
+
+            if (options.Path is not null)
+            {
+                var files = ResolveFilesFromPath(options.Path).ToDictionary(
+                    f => f,
+                    f => File.ReadAllText(f));
+            }
+
+            return new Dictionary<string, string>();
         }
 
-        // -------------------------------------------------------------------------
-        // Agent selection
-        // -------------------------------------------------------------------------
+        private static string FormatFileDiff(FileDiff file)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"### {file.Path} ({file.ChangeType})");
+
+            foreach (var hunk in file.Hunks)
+            {
+                sb.AppendLine(hunk.Header);
+                foreach (var line in hunk.Lines)
+                {
+                    var prefix = line.Type switch
+                    {
+                        DiffLineType.Added => "+",
+                        DiffLineType.Removed => "-",
+                        _ => " ",
+                    };
+                    sb.AppendLine($"{prefix}{line.Content}");
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        private static IReadOnlyList<string> ResolveFilesFromPath(string path)
+        {
+            if (Directory.Exists(path))
+            {
+                return
+                    Directory.GetFiles(path, "*", SearchOption.AllDirectories)
+                    .Select(Path.GetFullPath)
+                    .ToList();
+            }
+
+            if (File.Exists(path))
+            {
+                return [Path.GetFullPath(path)];
+            }
+
+            return [];
+        }
 
         private List<IAgent> SelectAgents(RunOptions options, AgoConfig config)
         {
-            if (options.Preset is not null)
-            {
-                var presents = config.Presets.GetValueOrDefault(options.Preset) ?? [];
-            }
-
-            var selected = new List<IAgent>();
-
-            foreach (var agent in options.Agents)
-            {
-                TryAdd(selected, config, agent);
-            }
-
-            return selected;
+            return options.Agents
+                .Select(id => _agents.GetValueOrDefault(id))
+                .Where(a => a is not null && IsEnabled(a!, config))
+                .ToList()!;
         }
 
-        private void TryAdd(List<IAgent> list, AgoConfig config, string agentId)
-        {
-            // Skip if not registered
-            if (!_agents.TryGetValue(agentId, out var agent))
-                return;
+        private static bool IsEnabled(IAgent agent, AgoConfig config) =>
+            !config.Agents.TryGetValue(agent.Id, out var cfg) || cfg.Enabled;
 
-            // Skip if disabled in config
-            if (config.Agents.TryGetValue(agentId, out var agentConfig) && !agentConfig.Enabled)
-                return;
-
-            list.Add(agent);
-        }
-
-        private static async Task<List<AgentResult>> RunAgentsAsync(
+        private async Task<IReadOnlyList<AgentResult>> RunAnalysePhaseAsync(
             List<IAgent> agents,
-            AnalysisContext context,
+            PipelineContext pipeline,
             CancellationToken ct)
         {
             var results = new AgentResult[agents.Count];
 
             await Parallel.ForEachAsync(
                 agents.Select((agent, i) => (agent, i)),
-                new ParallelOptions
-                {
-                    MaxDegreeOfParallelism = 4,
-                    CancellationToken = ct,
-                },
+                new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
                 async (item, token) =>
                 {
                     var (agent, i) = item;
                     Console.WriteLine($"  → Running {agent.Id}...");
-                    results[i] = await agent.AnalyseAsync(context, token);
+                    results[i] = await RunAgentAsync(agent, pipeline.Analysis, token);
                 });
 
-            return results.ToList();
+            return results;
         }
 
-        private static OrchestratorResult Aggregate(
-            List<AgentResult> agentResults,
-            TimeSpan elapsed)
+        private async Task<AgentResult> RunAgentAsync(
+            IAgent agent,
+            AnalysisContext context,
+            CancellationToken ct)
         {
+            // Whole agents receive all files at once — ExplainerAgent, PlannerAgent
+            if (agent.AgentScope == AgentScope.FileSet)
+                return await agent.AnalyseAsync(context, ct);
+
+            // PerFile: single file — pass directly
+            if (context.Files.Count <= 1)
+                return await agent.AnalyseAsync(context, ct);
+
+            // PerFile: multiple files — run per file, aggregate findings
             var allFindings = new List<Finding>();
-            var allExplanations = new List<AgentExplanation>();
+            var errors = new List<string>();
 
-            foreach (var result in agentResults)
+            foreach (var (path, content) in context.Files)
             {
-                if (!result.Success)
+                var fileContext = context with
                 {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine($"{result.AgentId} failed: {result.Error}");
-                    Console.ResetColor();
-                    continue;
-                }
+                    Files = new Dictionary<string, string> { [path] = content },
+                };
 
-                allFindings.AddRange(result.Findings);
+                var result = await agent.AnalyseAsync(fileContext, ct);
 
-                if (result.Explanation is not null)
-                {
-                    allExplanations.Add(new AgentExplanation(
-                        AgentId: result.AgentId,
-                        FilePath: result.Findings.FirstOrDefault()?.FilePath ?? "unknown",
-                        Text: result.Explanation));
-                }
+                if (result.Success)
+                    allFindings.AddRange(result.Findings);
+                else
+                    errors.Add($"{Path.GetFileName(path)}: {result.Error}");
             }
 
-            // Sort findings: High → Medium → Low, then by file and line
-            var sorted = allFindings
+            return new AgentResult
+            {
+                AgentId = agent.Id,
+                Success = errors.Count == 0,
+                Findings = allFindings,
+                Error = errors.Count > 0 ? string.Join("\n", errors) : null,
+            };
+        }
+
+        private static OrchestratorResult BuildResult(PipelineContext pipeline, TimeSpan elapsed)
+        {
+            var sorted = pipeline.Findings
                 .OrderBy(f => f.Priority)
                 .ThenBy(f => f.FilePath)
                 .ThenBy(f => f.LineStart)
@@ -174,10 +211,13 @@ namespace Ago.Core.Orchestrator
 
             return new OrchestratorResult
             {
-                Success = agentResults.All(r => r.Success),
+                Success = pipeline.AgentResults.All(r => r.Success),
                 Findings = sorted,
-                Explanations = allExplanations,
-                AgentResults = agentResults,
+                Explanations = pipeline.AgentResults
+                    .Where(r => r.Explanation is not null)
+                    .Select(r => new AgentExplanation(r.AgentId, r.Explanation!))
+                    .ToList(),
+                AgentResults = pipeline.AgentResults,
                 Elapsed = elapsed,
             };
         }
@@ -186,7 +226,6 @@ namespace Ago.Core.Orchestrator
         {
             Console.WriteLine();
 
-            // Explanations
             foreach (var explanation in result.Explanations)
             {
                 Console.ForegroundColor = ConsoleColor.Cyan;
@@ -196,7 +235,6 @@ namespace Ago.Core.Orchestrator
                 Console.WriteLine();
             }
 
-            // Findings
             if (result.HasFindings)
             {
                 Console.ForegroundColor = ConsoleColor.White;
@@ -216,31 +254,23 @@ namespace Ago.Core.Orchestrator
                     Console.ForegroundColor = color;
                     Console.Write($"  [{f.Priority,-6}] ");
                     Console.ResetColor();
-                    Console.Write($"{f.FilePath}:{f.LineStart}");
-                    Console.WriteLine($"  {f.Description}");
-
-                    //if (f.ProposedChange is not null && !options.DryRun)
-                    //{
-                    //    Console.ForegroundColor = ConsoleColor.DarkGray;
-                    //    Console.WriteLine($"           → {f.ProposedChange}");
-                    //    Console.ResetColor();
-                    //}
+                    Console.WriteLine($"{f.FilePath}:{f.LineStart}  {f.Description}");
                 }
             }
             else
             {
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("No findings.");
+                Console.WriteLine("  ✓ No findings.");
                 Console.ResetColor();
             }
 
-            // Summary
             Console.WriteLine();
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.WriteLine($"Done in {result.Elapsed.TotalSeconds:F1}s  " +
-                              $"| {result.FindingCount} finding(s)  " +
-                              $"| {result.AgentResults.Count} agent(s) ran");
+            Console.WriteLine($"Done in {result.Elapsed.TotalSeconds:F1}s" +
+                              $"  |  {result.FindingCount} finding(s)" +
+                              $"  |  {result.AgentResults.Count} agent(s) ran");
             Console.ResetColor();
         }
+
     }
 }
