@@ -22,6 +22,77 @@ Target audience: developers using the tool locally and via GitHub PRs.
 5. **Upward search for `.ago.yml`** — same as `.git` in git. No "open project" command needed. `.ago/` folder lives alongside it and holds all runtime data (history, cache, index).
 
 ---
+## LLM Cache
+
+AGO uses a transparent caching layer to reduce repeated LLM calls and cost.
+
+### Goals
+- Avoid repeated identical LLM calls
+- Reduce latency and cost
+- Keep behaviour deterministic per configuration
+
+### Cache Key
+
+Cache key is a hash of the full request context:
+
+- provider
+- model
+- temperature (and other sampling params)
+- system prompt
+- messages (full content)
+- agentId (optional but recommended)
+
+Example:
+
+```csharp
+var cachePayload = new
+{
+    Provider = provider,
+    Model = model,
+    Temperature = temperature,
+    Messages = messages,
+    Agent = agentId
+};
+```
+
+
+Serialized and hashed via SHA256. 
+
+### Storage
+
+Default: local filesystem
+
+```
+.ago/cache/llm/
+  ├── ab12cd34.json
+  ├── ef56gh78.json
+```
+
+### Cache Entry
+```
+{  
+"content": "...",  
+"model": "claude-sonnet-4",  
+"createdAt": "2026-03-07T12:00:00Z"  
+}
+```
+
+### Rules
+- Only successful responses are cached
+- Errors are never cached
+- Cache is automatically invalidated when:
+	- model changes
+	- provider changes
+	- prompt changes
+
+### TTL
+Configurable (default: 24h)
+
+### Future Extensions
+- Semantic cache (embedding similarity)
+- Partial cache reuse for large files
+
+---
 
 ## Solution Structure
 
@@ -31,7 +102,7 @@ ago/
 ├── .ago/                            # gitignore entire folder
 │   ├── history.jsonl                # append-only run history
 │   ├── index.json                   # class/file cache (Phase 2)
-│   ├── cache/                       # any other temporary data
+│   ├── cache/                       # LLM cache (hashed requests)
 │   └── prompts/                     # personal prompt overrides (gitignore)
 │       ├── style-review.md          # overrides team + built-in prompt
 │       └── explainer.md
@@ -84,6 +155,10 @@ ago/
 │   │   │   ├── RunOptions.cs
 │   │   │   └── ExecutionPlan.cs
 │   │   ├── LLM/
+│   │   │   ├── Cache/  
+│   │   │   │   ├── ILlmCache.cs  
+│   │   │   │   ├── FileLlmCache.cs  
+│   │   │   │   └── CacheKeyBuilder.cs
 │   │   │   ├── IChatClient.cs
 │   │   │   ├── ChatMessage.cs
 │   │   │   ├── ChatResponse.cs
@@ -182,6 +257,13 @@ presets:
     - security
 ```
 
+### LLM Strategy Resolution  
+The provider used for a request is resolved as:  
+1. Agent.provider (if set)  
+2. Agent.strategy (if set)  
+3. Global llm.strategy  
+4. Global llm.default
+
 ### Finding (agent output)
 ```csharp
 public record Finding
@@ -250,7 +332,12 @@ RunOptions → Orchestrator
   1. ResolveProjectRoot()
   2. Load AgoConfig
   3. Build agent list from RunOptions flags
-  4. ANALYSE PHASE: Parallel.ForEachAsync(agents) → List<AgentResult>
+  4. ANALYSE PHASE: 
+     For each agent:  
+		- Build prompt  
+		- Check LLM cache  
+		- If hit → return cached result  
+		- Else → call LLM → store in cache
   5. Aggregate all Findings
   6. If RunOptions.Fix:
        PLAN PHASE: MergeAgent.ResolveConflicts(findings) → UnifiedPatch
@@ -358,11 +445,11 @@ GitHub Bot       ──┘
 
 ## PlannerAgent Evolution
 
-| Stage | Behaviour |
-|-------|-----------|
-| 1 — MVP | Reads RunOptions flags, converts to agent list |
+| Stage         | Behaviour                                                   |
+| ------------- | ----------------------------------------------------------- |
+| 1 — MVP       | Reads RunOptions flags, converts to agent list              |
 | 2 — Semi-auto | LLM analyses diff/description, suggests plan, user confirms |
-| 3 — Autopilot | LLM makes decisions without confirmation |
+| 3 — Autopilot | LLM makes decisions without confirmation                    |
 
 The Orchestrator does not change between stages. Only PlannerAgent changes.
 
@@ -394,11 +481,11 @@ Reads the PR description and automatically decides which additional agents to ru
 
 ### Where the bot writes changes
 
-| Action type | Destination |
-|---|---|
-| Review findings | Inline comments on PR lines |
-| Minor auto-fixes (formatting) | Commit to the same PR tagged `[ago-bot]` |
-| Test generation / new code | Separate PR targeting the same branch (`ago/tests-{pr-number}`) |
+| Action type                   | Destination                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| Review findings               | Inline comments on PR lines                                     |
+| Minor auto-fixes (formatting) | Commit to the same PR tagged `[ago-bot]`                        |
+| Test generation / new code    | Separate PR targeting the same branch (`ago/tests-{pr-number}`) |
 
 ---
 
@@ -470,17 +557,17 @@ Reads the PR description and automatically decides which additional agents to ru
 
 ## Technology Stack
 
-| Component | Technology |
-|---|---|
-| Language | C# / .NET 8+ |
-| CLI framework | System.CommandLine |
-| YAML serialization | YamlDotNet |
-| C# parsing | Microsoft.CodeAnalysis (Roslyn) |
-| LLM | Anthropic Claude (primary), OpenAI (optional) |
-| GitHub API | Octokit.net |
-| Web API | ASP.NET Core Minimal API |
-| Frontend | React + TypeScript |
-| Tests | xUnit |
+| Component          | Technology                                    |
+| ------------------ | --------------------------------------------- |
+| Language           | C# / .NET 8+                                  |
+| CLI framework      | System.CommandLine                            |
+| YAML serialization | YamlDotNet                                    |
+| C# parsing         | Microsoft.CodeAnalysis (Roslyn)               |
+| LLM                | Anthropic Claude (primary), OpenAI (optional) |
+| GitHub API         | Octokit.net                                   |
+| Web API            | ASP.NET Core Minimal API                      |
+| Frontend           | React + TypeScript                            |
+| Tests              | xUnit                                         |
 
 ---
 
@@ -538,11 +625,11 @@ Review this {{scope}}:
 
 Supported placeholders:
 
-| Placeholder | Replaced with |
-|---|---|
-| `{{scope}}` | `diff` / `file src/X.cs` / `class UserService` |
-| `{{code}}` | the actual code or formatted diff |
-| `{{language}}` | value from `AgoConfig.Project.Language` |
+| Placeholder    | Replaced with                                  |
+| -------------- | ---------------------------------------------- |
+| `{{scope}}`    | `diff` / `file src/X.cs` / `class UserService` |
+| `{{code}}`     | the actual code or formatted diff              |
+| `{{language}}` | value from `AgoConfig.Project.Language`        |
 
 ### Implementation
 
@@ -783,3 +870,76 @@ agents[AgoConstants.AgentIds.StyleReview] = new StyleReviewAgent(factory);
 foreach (var plugin in pluginLoader.LoadAll(projectRoot))
     agents[plugin.Id] = plugin;
 ```
+
+
+--- 
+
+## LLM Provider Strategies  
+  
+AGO supports multiple strategies for selecting an LLM provider.  
+  
+The goal is to balance cost, speed, and quality without requiring complex configuration.  
+  
+### Strategy Types  
+  
+| Strategy        | Description                               |
+| --------------- | ----------------------------------------- |
+| `explicit`      | Use the provider specified directly       |
+| `cheap-first`   | Try local model first, fallback to remote |
+| `quality-first` | Prefer best model, fallback to local      |
+| `balanced`      | Heuristic based on input size             |
+| `local-only`    | Only local models (no API usage)          |
+| `failover`      | Primary provider with fallback            |
+  
+### Example Config  
+  
+```yaml  
+llm:  
+default: ollama  
+```
+
+
+Agent override:
+
+```
+agents:  
+style-review:  
+provider: ollama  
+  
+security-review:  
+strategy: quality-first
+```
+
+### Strategy Resolution
+1. Agent-level `provider`
+2. Agent-level `strategy`
+3. Global `llm.strategy`
+4. Global `llm.default`
+
+### Behaviour
+Strategies are implemented in code (not YAML DSL)
+No user-defined expressions (to avoid complexity)
+Deterministic and loggable
+
+### Example: balanced
+- small input → local model
+- large input → remote model
+
+### Example: cheap-first
+- try ollama
+- fallback → claude-cli
+- fallback → API
+
+## LLM Execution Logging
+
+Each LLM call should log:
+
+- agentId
+- selected provider
+- strategy used
+- cache hit/miss
+
+Example:
+
+[style-review] strategy=cheap-first → ollama (cache miss)
+[security-review] provider=anthropic (cache hit)
